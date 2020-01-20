@@ -1,0 +1,25 @@
+Mark-recapture modeling for mussel populations in Texas.
+
+Ongoing dissertation research of V. A. Sotola, PhD candidate at Texas State University.
+
+
+Data files (Three secondary sampling dates in each of 5 primary sampling events.)
+Upper Site
+UPR_CH_TRVE_FLOY.csv Capture histories for floy tagged Tritogonia verrucosa at upper site. 
+UPR_CH_QUPU_FLOY.csv Capture histories for floy tagged Cyclonaias pustulosa at upper site.
+UPR_CH_QUPE_FLOY.csv Capture histories for floy tagged Cyclonaias petrina at upper site. 
+UPR_CH_QUPU_PIT.csv Capture histories for PIT tagged Cyclonaias pustulosa at upper site. 
+UPR_CH_QUPE_PIT.csv Capture histories for PIT tagged Cyclonaias petrina at upper site.
+
+Lower Site
+LWR_CH_AMPL_FLOY.csv Capture histories for floy tagged Ambelma plicata at upper site.
+LWR_CH_QUPU_FLOY.csv Capture histories for floy tagged Cyclonaias pustulosa at upper site. 
+LWR_CH_QUPE_FLOY.csv Capture histories for floy tagged Cyclonaias petrina at upper site.
+LWR_CH_QUPU_PIT.csv Capture histories for PIT tagged Cyclonaias pustulosa at upper site. 
+LWR_CH_QUPE_PIT.csv Capture histories for PIT tagged Cyclonaias petrina at upper site. 
+
+
+Model files
+Robust-design mark-recapture models used in this study, modified from  Riecke et al. (2018) 
+
+MarkRecaptureJAGScode_Sotola_etal.R
