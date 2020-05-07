@@ -4,10 +4,12 @@ Completed dissertation research of V. A. Sotola, PhD, Texas State University.
 
 In review at <em>Freshwater Biology</em>.
 
+<br>
 
 ## Data files
 Surveys included three secondary sampling dates within each of 5 primary sampling events at **upper** and **lower** sites in the river.
 
+<br>
 
 #### Upper Site
 <b>`data_SITE_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at upper site.
@@ -16,6 +18,7 @@ Surveys included three secondary sampling dates within each of 5 primary samplin
 
 <b>`data_SITE_pit.csv`</b>  PIT tag detections at upper site. 
 
+<br>
 
 #### Lower Site
 <b>`data_alt_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at lower site.
@@ -24,6 +27,7 @@ Surveys included three secondary sampling dates within each of 5 primary samplin
 
 <b>`data_alt_pit.csv`</b>  PIT tag detections at upper site keyed to `floy_id` in `data_alt_tags.csv`. 
 
+<br>
 
 ## Model files
 Robust-design mark-recapture models used in this study, modified from  Riecke et al. (2018) 
