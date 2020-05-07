@@ -135,6 +135,7 @@ ch_test <- ch_test[ch_test$species %in% c('QUHO', 'QUPE', 'AMPL'), ]
 
 # Replace dates with unambiguous string format
 # through serial replacement and string manipulation
+# with pipes (%>%)
 ch_test$date %>% 
   gsub(pattern='X', replacement = '') %>%
     gsub(pattern='\\.', replacement = '/')%>%
@@ -179,7 +180,6 @@ ch0 <- data.frame(
     )
   )
 )
-
 
 # Have a look at raw counts for a sanity check
 plot(apply(ch0[ ,5:ncol(ch0)], 2, sum), type='l')
@@ -294,11 +294,25 @@ for(i in 1:nrow(ch_test)){
   }
 }
 
-# Cross-tab into a 3-d array with
-sp_totes <- xtabs(
-  formula = ch ~ species + primary, data = ch_test
+# Collapse individual detections on individuals,
+# convert to presence/absence, and then collapse
+# on species x primary period.
+counts <- plyr::ddply(
+  ch_test,
+  c('species', 'primary', 'floy_id'),
+  summarize,
+  counter = sum(ch)
+  )
+counts$counter[counts$counter>1] <- 1
+counts1 <- plyr::ddply(
+  counts,
+  c('species', 'primary'),
+  summarize,
+  counter = sum(counter)
+  )
+sp_totes <- data.frame(
+  reshape::cast(counts1, formula = species~primary, value='counter')[ , -1]
 )
-
 
 # Model specification ----
 modelString = "
@@ -439,8 +453,8 @@ pars <- c('beta', 'gamma', 'phi', 'N')
 # . MCMC settings ----
 nc <- 3
 nt <- 10
-ni <- 150
-nb <- 50
+ni <- 15000
+nb <- 5000
 
 # . Call JAGS and run model ----
 rdt <- jags(dat, inits=inits, pars,
