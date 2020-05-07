@@ -8,7 +8,7 @@ library(lubridate)
 # Data manipulation ----
 # . Tagging data ----
 # Read in the tagging data
-tags <- read.csv('data_tags.csv', stringsAsFactors = FALSE)
+tags <- read.csv('data_alt_tags.csv', stringsAsFactors = FALSE)
 check <- vector(mode = 'character', length=nrow(tags))
 
 # Replace slashes in floy_id with letters
@@ -333,24 +333,21 @@ model {
           for (t in 1:n.years){
             for (j in 1:(n.sec[t])){
                 logit(p[i,t,j]) <- lp[i,t,j]  
-                lp[i,t,j] <- alpha[t] + beta[1]*config[i,1] + beta[2]*config[i,2] +
-                             beta[3]*config[i,3] + beta[4]*config[i,4]
+                lp[i,t,j] <- inprod(beta[t,j,], X[i,])*(1-p_loss[i])
                 yes[i,t,j] ~ dbin(p[i,t,j], total[i,t,j])
             }
           }
         }
-      # Alphas (intercepts) for linear predictor of logit-scale
+      # Betas (intercepts & 'slopes') for linear predictor of logit-scale
       # p, varying by time-period
       for(t in 1:n.years){
-        alpha[t] ~ dunif(0, 1)
-      }
-      
-      # Betas for linear predictor of
-      # logit-scale p
-        for(c in 1:n.config){
-          beta[c] ~ dnorm(0, 1)
+        for(j in 1:(n.sec[t])){
+          for(n in 1:nX){
+            beta[t,j,n] ~ dnorm(0, 0.001)
+          }
         }
-      
+      }
+
     # Primary occasions p
       for(i in 1:n.ind){
         for(t in 1:n.years){        
@@ -390,23 +387,6 @@ model {
     }
   }
   
-  # Derived quantities
-  # Detection probability from year-specific intercepts (alpha) and
-  # tag-specific intercept adjustments (beta)
-  for(t in 1:n.years){
-    pl.out[1 ,t] <- alpha[t] + beta[1]
-  }
-  for(c in 2:n.config){
-    for(t in 1:n.years){
-      pl.out[c, t] <- alpha[t] + beta[1] + beta[c]
-    }
-  }
-  for(c in 1:n.config){
-    for(t in 1:n.years){
-      logit(p_est[c,t]) <- pl.out[c,t]
-    }
-  }
-  
 }
 "
 
@@ -417,8 +397,9 @@ first <- apply(ch_mod, 1, firsts)
 
 # Make a model matrix for tag configuration
 # or other covariates of interest
-config <- model.matrix(glm(X2017.04.28~tag_config, data = ch0))
-attributes(config)[2:3] <- NULL
+dummy <- ch0[ , c(3:ncol(ch0))]
+betas <- model.matrix(glm(p_tag_loss~tag_config, data = ch0))
+attributes(betas)[2:3] <- NULL
 
 # Package into a list for JAGS
 dat <- list(
@@ -427,13 +408,14 @@ dat <- list(
   n.sec = rep(n.sec.occ, n.years),
   n.years = ncol(ch_mod),
   n.ind = nrow(ch_mod),
-  n.config = length(unique(ch0$tag_config)),
   n.species = length(unique(ch0$species)),
   species = as.numeric(as.factor(ch0$species)),
-  config = config,
+  X = betas,
+  nX = ncol(betas),
   yes = yesarray,
   total = totalarray,
-  C = sp_totes
+  C = sp_totes,
+  p_loss = ch0$p_tag_loss
 )
 
 # . Initial Values ----
@@ -444,20 +426,21 @@ for (i in 1:nrow(ch_mod)){
   }
 }
 
-yes.init <- array(1, dim=unlist(dim(yesarray)), dimnames = NULL)
+yes.init <- yes
+
 inits <- function(){list(
   z = z.init,
   N = matrix(1000, nrow = nrow(sp_totes), ncol = ncol(sp_totes))
   )}  
 
 # . Parameters to monitor ----
-pars <- c('alpha', 'beta', 'gamma', 'phi', 'N', 'p_est')
+pars <- c('beta', 'gamma', 'phi', 'N')
 
 # . MCMC settings ----
 nc <- 3
 nt <- 10
-ni <- 15000
-nb <- 5000
+ni <- 150
+nb <- 50
 
 # . Call JAGS and run model ----
 rdt <- jags(dat, inits=inits, pars,
@@ -470,11 +453,73 @@ rdt <- jags(dat, inits=inits, pars,
 # . Print model summary ----
 print(rdt, digits=3)
 
+# Result ----
+# . Extract posteriors ----
+sims <- rdt$BUGSoutput$sims.list
 
+# . Detection ----
+# .. Detection by primary period ----
+# Detection for each MCMC iteration in 
+# each primary period from posts
+p_t <- boot::inv.logit(apply(sims$beta, c(1,2), mean))
 
+# Melt data across remainig dimensions
+# of 1: iteration, 2: primary period
+p_t <- reshape2::melt(p_t)
+names(p_t) <- c('iteration', 'primary_period', 'p')
 
+# Get mean and 95% HDI of detection by primary period
+p_t_summary <- plyr::ddply(.data = p_t,
+                           .variables = 'primary_period',
+                           plyr::summarize,
+                           est = mean(p), 
+                           lwr = quantile(p, probs=0.025),
+                           upr = quantile(p, probs=0.975)
+                           )
 
+boxplot(p~primary_period, data=p_t,
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = c(1,2,3,4,5), ylab = 'Detection probability (p)',
+        whisklty=1, yaxt='n', xlab='Primary period')
+axis(side=2, las=TRUE)
 
+# .. Detection by secondary period within primaries ----
+# Mean detection in each secondary period within primary
+# periods.
+p_j <- boot::inv.logit(apply(sims$beta, c(1,2,3), mean))
 
+# Melt into long-form data
+p_j <- reshape2::melt(p_j)
+names(p_j) <- c('iteration', 'primary_period', 'secondary_period', 'p')
+
+# Get mean and 95% HDI of detection by primary period
+p_j_summary <- plyr::ddply(.data = p_j,
+                           .variables = c('primary_period', 'secondary_period'),
+                           plyr::summarize,
+                           est = mean(p), 
+                           lwr = quantile(p, probs=0.025),
+                           upr = quantile(p, probs=0.975)
+                           )
+# Make a boxplot
+par(mar = c(5,5,1,1))
+boxplot(p~primary_period+secondary_period, data=p_j,
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = rep(c(1,2,3), 5), ylab = 'Detection probability (p)',
+        whisklty=1, yaxt='n', xlab='Secondary period')
+abline(v=seq(3.5,3.5*4, 3))
+axis(side = 2, las = TRUE)
+axis(side = 3, at=seq(2, 2*7, 3), labels=c(1, 2, 3, 4, 5), tick=FALSE)
+mtext(side = 3, line= 4, text = 'Primary period')
+
+# .. Detection by tag configuration ----
+# Summarize posteriors by tag configuration (dimension 4 of beta)
+p_config <- boot::inv.logit(apply(sims$beta, c(1,4), mean))
+
+# Make a plot
+boxplot(p_config, ylim=c(0.35,.55), ylab = 'Detection probability (p)',
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = c("1F0P", "1F1P", "2F0P", "2F1P"),
+        whisklty=1, yaxt='n', xlab='Tagging configuration')
+axis(side=2, las=TRUE)
 
 
