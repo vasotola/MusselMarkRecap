@@ -1,20 +1,23 @@
 # Mark-recapture modeling for mussel populations in Texas.
 
 Completed dissertation research of V. A. Sotola, PhD, Texas State University.
-Submitted to <em>Freshwater Biology</em>.
+
+In review at <em>Freshwater Biology</em>.
 
 
 ## Data files
 Surveys included three secondary sampling dates within each of 5 primary sampling events at **upper** and **lower** sites in the river.
 
 
-### Upper Site
+#### Upper Site
 <b>`data_SITE_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at upper site.
+
 <b>`data_SITE_floy.csv`</b> Floy tag detections at upper site. 
+
 <b>`data_SITE_pit.csv`</b>  PIT tag detections at upper site. 
 
 
-### Lower Site
+#### Lower Site
 <b>`data_alt_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at lower site.
 
 <b>`data_alt_floy.csv`</b> Floy tag detections at upper site keyed to `floy_id` in `data_alt_tags.csv`. 
