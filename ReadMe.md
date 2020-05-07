@@ -9,16 +9,12 @@ In review at <em>Freshwater Biology</em>.
 ## Data files
 Surveys included three secondary sampling dates within each of 5 primary sampling events at **upper** and **lower** sites in the river.
 
-<br>
-
 #### Upper Site
 <b>`data_SITE_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at upper site.
 
 <b>`data_SITE_floy.csv`</b> Floy tag detections at upper site. 
 
 <b>`data_SITE_pit.csv`</b>  PIT tag detections at upper site. 
-
-<br>
 
 #### Lower Site
 <b>`data_alt_tags.csv`</b> Floy and PIT tag IDs associated with individual mussels at lower site.
