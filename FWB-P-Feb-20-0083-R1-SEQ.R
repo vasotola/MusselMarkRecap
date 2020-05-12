@@ -16,7 +16,7 @@ for(i in 1:nrow(tags)){
   tags$floy_id[i] <- gsub(
     pattern = "/", 
     x=tags$floy_id[i],
-    replacement=substr(tags$floy_id[i], start=1, stop=1),
+    replacement=substr(tags$floy_id[i], start=1, stop=1)
     )  
 }
 
@@ -84,7 +84,7 @@ recap_pit <- read.csv('data_alt_pit.csv', stringsAsFactors = F)
     rf_long$floy_id[i] <- gsub(
       pattern = "/", 
       x=rf_long$floy_id[i],
-      replacement=substr(rf_long$floy_id[i], start=1, stop=1),
+      replacement=substr(rf_long$floy_id[i], start=1, stop=1)
       )  
   }
 
@@ -101,7 +101,7 @@ recap_pit <- read.csv('data_alt_pit.csv', stringsAsFactors = F)
     rp_long$floy_id[i] <- gsub(
       pattern = "/", 
       x=rp_long$floy_id[i],
-      replacement=substr(rp_long$floy_id[i], start=1, stop=1),
+      replacement=substr(rp_long$floy_id[i], start=1, stop=1)
       )  
   }
 
@@ -318,8 +318,15 @@ sp_totes <- data.frame(
   reshape::cast(counts1, formula = species~primary, value='counter')[ , -1]
 )
 
+# Get total number of individuals in each primary 
+# period by species
 sp_totes <- sp_totes[ , c(order(names(sp_totes)))]
 
+# Get total number of individuals tagged for each
+# species as a starting guess
+sp_unique <- plyr::ddply(
+  ch_test, 'species', plyr::summarise, totes=length(unique(floy_id))
+  )
 
 # Model specification ----
 modelString = "
@@ -329,12 +336,12 @@ model {
       for(i in 1:(n.ind)){
         for(t in 1:(n.years-1)){
           # Logit-scale predictor of apparent survival (species)
-            logit(r_phi[i, t]) <- l_phi[i, t]
-            l_phi[i, t] <-  phi[species[i], t]
+            logit(r_phi[i,t]) <- l_phi_i[i,t]
+            l_phi_i[i,t] <-  l_phi[species[i],t]
           
           # Logit-scale predictor of site fidelity (species)
-            logit(r_gamma[i, t]) <- l_gamma[i, t]
-            l_gamma[i, t] <- gamma[species[i], t]
+            logit(r_gamma[i,t]) <- l_gamma_i[i,t]
+            l_gamma_i[i,t] <- l_gamma[species[i],t]
         }
       }
     
@@ -342,8 +349,11 @@ model {
     # phi and gamma
       for(s in 1:n.species){
         for(t in 1:(n.years-1)){
-          phi[s, t] ~ dunif(0, 1)
-          gamma[s, t] ~ dunif(0, 1)
+          l_phi[s,t] ~ dnorm(0, 0.001)
+          l_gamma[s,t] ~ dnorm(0, 0.001)
+
+          logit(phi[s,t]) <- l_phi[s,t]
+          logit(gamma[s,t]) <- l_gamma[s,t]
         }
       }
     
@@ -399,12 +409,22 @@ model {
   # unknown probability of success (pstar) and some
   # starting number of trials (N)
   for(s in 1:n.species){
-    for(t in 1:n.years){
-      C[s,t] ~ dbinom(mean(pstar[,t]), N[s,t])
-      N[s,t] ~ dpois(lambda[s,t])
-      log(lambda[s,t]) <- mu[s,t]
-      mu[s,t] ~ dnorm(0, 0.001)
+    # Initialize counts for each species 
+    N[s, 1] ~ dpois(maxes[s]/mean(pstar[,])) 
+
+    log(lambda[s]) <- mu[s]
+    mu[s] ~ dunif(-10, 10)
+
+    # Total number alive at time t as function of
+    # number alive at t-1, survival, and emigration
+    for(t in 2:n.years){
+      N[s,t] ~ dpois(N[s, t-1]*phi[s, t-1]*gamma[s,t-1])
     }
+
+    for(t in 1:n.years){
+      C[s, t] ~ dbin(mean(pstar[,t]), N[s,t])
+    }
+
   }
   
 }
@@ -435,6 +455,7 @@ dat <- list(
   yes = yesarray,
   total = totalarray,
   C = sp_totes,
+  maxes = sp_unique[,2],
   p_loss = ch0$p_tag_loss
 )
 
@@ -459,8 +480,8 @@ pars <- c('beta', 'gamma', 'phi', 'N')
 # . MCMC settings ----
 nc <- 3
 nt <- 10
-ni <- 150
-nb <- 50
+ni <- 1500
+nb <- 500
 
 # . Call JAGS and run model ----
 rdt <- jags(dat, inits=inits, pars,
@@ -542,4 +563,37 @@ boxplot(p_config, ylim=c(0.35,.55), ylab = 'Detection probability (p)',
         whisklty=1, yaxt='n', xlab='Tagging configuration')
 axis(side=2, las=TRUE)
 
+# . Abundance, phi, gamma checks
+# .. Abundance by primary period ----
+# Melt data across remainig dimensions
+# of 1: iteration, 2: species, 3: primary period
+n_t <- reshape2::melt(sims$N)
+names(n_t) <- c('iteration', 'species', 'primary_period', 'N')
+
+phi_t <- reshape2::melt(sims$phi)
+names(phi_t) <- c('iteration', 'species', 'primary_period', 'Phi')
+
+gamma_t <- reshape2::melt(sims$gamma)
+names(gamma_t) <- c('iteration', 'species', 'primary_period', 'gamma')
+
+species = 1
+
+par(mfrow=c(3,1))
+boxplot(N~primary_period, data=n_t[n_t$species==species,],
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = c(1,2,3,4,5), ylab = 'Abundance (N)',
+        whisklty=1, yaxt='n', xlab='Primary period')
+axis(side=2, las=TRUE)
+
+boxplot(Phi~primary_period, data=phi_t[phi_t$species==species,],
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = c(1,2,3,4), ylab = 'Apparent survival',
+        whisklty=1, yaxt='n', xlab='Primary period')
+axis(side=2, las=TRUE)
+
+boxplot(gamma~primary_period, data=gamma_t[gamma_t$species==species,],
+        boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
+        names = c(1,2,3,4), ylab = 'Site fidelity',
+        whisklty=1, yaxt='n', xlab='Primary period')
+axis(side=2, las=TRUE)
 
