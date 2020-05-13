@@ -9,16 +9,7 @@ library(lubridate)
 # . Tagging data ----
 # Read in the tagging data
 tags <- read.csv('data_alt_tags.csv', stringsAsFactors = FALSE)
-check <- vector(mode = 'character', length=nrow(tags))
-
-# Replace slashes in floy_id with letters
-for(i in 1:nrow(tags)){
-  tags$floy_id[i] <- gsub(
-    pattern = "/", 
-    x=tags$floy_id[i],
-    replacement=substr(tags$floy_id[i], start=1, stop=1)
-    )  
-}
+tags <- tags[tags$species%in%c('AMPL', 'QUPE', 'QUHO'), ]
 
 # Assign number of floy tags (1 or 2)
 # Based on the length of the floy_id
@@ -70,66 +61,30 @@ recap_pit <- read.csv('data_alt_pit.csv', stringsAsFactors = F)
 
 # Convert both sets of detection data
 # to long format
-
-# Grubbing data
-  # Convert
+  # Grubbing data
   rf_long <- tidyr::gather(
     data = recap_floy,
     key = date,
     value = ch,
     4:ncol(recap_floy)
     )
-  # Replace slashes in floy_id with letters
-  for(i in 1:nrow(rf_long)){
-    rf_long$floy_id[i] <- gsub(
-      pattern = "/", 
-      x=rf_long$floy_id[i],
-      replacement=substr(rf_long$floy_id[i], start=1, stop=1)
-      )  
-  }
-
-# PIT data
-  # Convert
+  
+  # PIT data
   rp_long<- tidyr::gather(
     data = recap_pit,
     key = date,
     value = ch,
     4:ncol(recap_pit)
     )
-  # Replace slashes in floy_id with letters
-  for(i in 1:nrow(rp_long)){
-    rp_long$floy_id[i] <- gsub(
-      pattern = "/", 
-      x=rp_long$floy_id[i],
-      replacement=substr(rp_long$floy_id[i], start=1, stop=1)
-      )  
-  }
-
 
 # Combine floy and PIT detections
 dets <- rbind(rf_long, rp_long)
 
-# There are three floy tags that 
-# have IDs switched. 
-flopped <- unique(dets$floy_id[!dets$floy_id%in%tags$floy_id])
-
-# This is what they look like corrected
-unflopped <- paste0(
-  substr(flopped, start=5, stop=nchar(flopped)),
-  substr(flopped, start=1, stop=4)
-)
-
-# Can replace them now
-for(i in 1:length(flopped)){
-  dets$floy_id[dets$floy_id==flopped[i]] <- unflopped[i]
-}
-
 # . Data merge ----
 # Merge the tag data with detection data
 ch_test <- merge(
-  dets, tags, by = c('floy_id', 'species')
+  dets, tags, by = c('floy_id', 'mussel_id', 'species')
   )
-nrow(ch_test) - nrow(dets)
 
 ch_test <- ch_test[ch_test$species %in% c('QUHO', 'QUPE', 'AMPL'), ]
 
@@ -146,24 +101,24 @@ ch_test$date %>%
 # in detection data
 covs <- plyr::ddply(
   ch_test,
-  c('floy_id', 'species', 'tag_config', 'p_tag_loss'),
+  c('mussel_id', 'species', 'tag_config', 'p_tag_loss'),
   plyr::summarize, check <- 1
   )
+
 
 # . Capture histories ----
 # Make a capture history from combined
 # detection data
 ch2 <- data.frame(reshape::cast(
   data = ch_test,
-  formula = floy_id ~ date,
+  formula = mussel_id ~ date,
   value = 'ch',
   fun.aggregate = sum
   ))
 
-
 # Merge with the covs data for individual
 # covariates
-ch1 <- merge(ch2, covs, by = 'floy_id')
+ch1 <- merge(ch2, covs, by = 'mussel_id')
 
 # Re-organize and convert all values in
 # capture history > 1 to 1.
@@ -180,9 +135,6 @@ ch0 <- data.frame(
     )
   )
 )
-
-# Have a look at raw counts for a sanity check
-plot(apply(ch0[ ,5:ncol(ch0)], 2, sum), type='l')
 
 # Make ch into a matrix
 ch <- as.matrix(ch0[ , 5:ncol(ch0)])
@@ -267,7 +219,9 @@ for (i in 1:n.years){
   }
 }
 
-# Unlist and re-order
+# Unlist and re-order, overwrite the old objects
+# and organize yes/no into arrays that repeat
+# over individuals
 yes <- matrix(c(yes), ncol=3, byrow = TRUE)
 yesarray <- array(
   rep(yes, nrow(ch0)),
@@ -303,7 +257,7 @@ for(i in 1:nrow(ch_test)){
 # on species x primary period.
 counts <- plyr::ddply(
   ch_test,
-  c('species', 'primary', 'floy_id'),
+  c('species', 'primary', 'mussel_id'),
   summarize,
   counter = sum(ch)
   )
@@ -324,10 +278,9 @@ sp_totes <- sp_totes[ , c(order(names(sp_totes)))]
 
 # Get total number of individuals tagged for each
 # species as a starting guess
-sp_unique <- plyr::ddply(
-  ch_test, 'species', plyr::summarise, totes=length(unique(floy_id))
-  )
-
+sp_unique <- apply(sp_totes[1:3, 1:2], 1, max)
+  
+  
 # Model specification ----
 modelString = "
 model {
@@ -349,8 +302,8 @@ model {
     # phi and gamma
       for(s in 1:n.species){
         for(t in 1:(n.years-1)){
-          l_phi[s,t] ~ dnorm(0, 0.001)
-          l_gamma[s,t] ~ dnorm(0, 0.001)
+          l_phi[s,t] ~ dnorm(0, 1)
+          l_gamma[s,t] ~ dnorm(0, 1)
 
           logit(phi[s,t]) <- l_phi[s,t]
           logit(gamma[s,t]) <- l_gamma[s,t]
@@ -410,19 +363,19 @@ model {
   # starting number of trials (N)
   for(s in 1:n.species){
     # Initialize counts for each species 
-    N[s, 1] ~ dpois(maxes[s]/mean(pstar[,])) 
+    N[s, 1] ~ dpois(maxes[s])
 
     log(lambda[s]) <- mu[s]
     mu[s] ~ dunif(-10, 10)
 
     # Total number alive at time t as function of
-    # number alive at t-1, survival, and emigration
+    # number alive at t-1, survival, and site fidelity
     for(t in 2:n.years){
       N[s,t] ~ dpois(N[s, t-1]*phi[s, t-1]*gamma[s,t-1])
     }
 
     for(t in 1:n.years){
-      C[s, t] ~ dbin(mean(pstar[,t]), N[s,t])
+      C[s, t] ~ dpois(N[s,t]/mean(pstar[,t]))
     }
 
   }
@@ -455,7 +408,7 @@ dat <- list(
   yes = yesarray,
   total = totalarray,
   C = sp_totes,
-  maxes = sp_unique[,2],
+  maxes = sp_unique,
   p_loss = ch0$p_tag_loss
 )
 
@@ -480,8 +433,8 @@ pars <- c('beta', 'gamma', 'phi', 'N')
 # . MCMC settings ----
 nc <- 3
 nt <- 10
-ni <- 1500
-nb <- 500
+ni <- 150
+nb <- 50
 
 # . Call JAGS and run model ----
 rdt <- jags(dat, inits=inits, pars,
@@ -576,7 +529,7 @@ names(phi_t) <- c('iteration', 'species', 'primary_period', 'Phi')
 gamma_t <- reshape2::melt(sims$gamma)
 names(gamma_t) <- c('iteration', 'species', 'primary_period', 'gamma')
 
-species = 1
+species = 3
 
 par(mfrow=c(3,1))
 boxplot(N~primary_period, data=n_t[n_t$species==species,],
@@ -588,12 +541,12 @@ axis(side=2, las=TRUE)
 boxplot(Phi~primary_period, data=phi_t[phi_t$species==species,],
         boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
         names = c(1,2,3,4), ylab = 'Apparent survival',
-        whisklty=1, yaxt='n', xlab='Primary period')
+        whisklty=1, yaxt='n', xlab='Interval')
 axis(side=2, las=TRUE)
 
 boxplot(gamma~primary_period, data=gamma_t[gamma_t$species==species,],
         boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
         names = c(1,2,3,4), ylab = 'Site fidelity',
-        whisklty=1, yaxt='n', xlab='Primary period')
+        whisklty=1, yaxt='n', xlab='Interval')
 axis(side=2, las=TRUE)
 
