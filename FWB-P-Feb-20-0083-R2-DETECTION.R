@@ -452,7 +452,7 @@ print(rdt, digits=3)
 sims <- rdt$BUGSoutput$sims.list
 
 # . Detection ----
-# .. Detection by primary period within secondaries ----
+# .. p by primary and secondary periods ----
 # Detection for each MCMC iteration in 
 # each primary period from posts
 str(sims$beta)
@@ -518,7 +518,7 @@ boxplot(pstar~primary, data=pstar,
 axis(side=2, las=2)
 
 
-# .. Detection by tag configuration ----
+# .. p and pStar by tag configuration ----
 # Summarize posteriors by tag configuration (dimension 4 of beta)
 # pstar
 pstar_ind <- reshape2::melt(sims$pstar)
@@ -545,13 +545,22 @@ configs <- data.frame(
 # Make a plot of p by tag configuration
 # Merge configurations with individual detection probabilities
 test <- merge(p_t, configs, by='individual')
-plyr::ddply(ch0, 'tag_config', plyr::summarize, n = length(tag_config))
 boxplot(p~configuration, data = test,
         ylab = 'Detection probability (p)',
         boxwex=.25, outline=FALSE, medlwd=1, col='gray87',
         names = c("1F0P", "1F1P", "2F0P", "2F1P"),
         whisklty=1, yaxt='n', xlab='Tagging configuration')
 axis(side=2, las=TRUE)
+
+# Here are the estimates of p by configuration:
+plyr::ddply(test,
+            'configuration',
+            plyr::summarize,
+            est = mean(p), 
+            lwr = quantile(p, probs=0.025),
+            upr = quantile(p, probs=0.975)
+            )
+
 
 # Make a plot of p_star by tag configuration
 # Merge configurations with individual detection probabilities
@@ -564,6 +573,14 @@ boxplot(pstar~configuration, data = test,
         whisklty=1, yaxt='n', xlab='Tagging configuration')
 axis(side=2, las=TRUE)
 
+# Here are the estimates of pstar by configuration:
+plyr::ddply(test,
+            'configuration',
+            plyr::summarize,
+            est = mean(pstar), 
+            lwr = quantile(pstar, probs=0.025),
+            upr = quantile(pstar, probs=0.975)
+            )
 
 # . Abundance, phi, gamma checks ----
 # .. Abundance by primary period ----
