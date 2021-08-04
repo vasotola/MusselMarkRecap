@@ -2,7 +2,7 @@
 
 Completed dissertation research of V. A. Sotola, PhD, Texas State University.
 
-In review at <em>Freshwater Biology</em>.
+Published at <em>Freshwater Biology</em>. https://doi.org/10.1111/fwb.13642
 
 <br>
 
